@@ -4,8 +4,8 @@
 #include <string.h>
 #include <assert.h>
 
-#define LWS_ZLIB_WINDOW_BITS 15
-#define LWS_ZLIB_MEMLEVEL 8
+#define DEFLATE_FRAME_COMPRESSION_LEVEL_SERVER 1
+#define DEFLATE_FRAME_COMPRESSION_LEVEL_CLIENT Z_DEFAULT_COMPRESSION
 
 int lws_extension_callback_deflate_frame(
 		struct libwebsocket_context *context,
@@ -54,12 +54,12 @@ int lws_extension_callback_deflate_frame(
 		conn->buf_out_length = sizeof(conn->buf_out);
 		conn->compressed_out = 0;
 		conn->buf_pre = NULL;
-		conn->buf_in = lws_malloc(LWS_SEND_BUFFER_PRE_PADDING +
+		conn->buf_in = (unsigned char*)lws_malloc(LWS_SEND_BUFFER_PRE_PADDING +
 					  conn->buf_in_length +
 					  LWS_SEND_BUFFER_POST_PADDING);
 		if (!conn->buf_in)
 			goto bail;
-		conn->buf_out = lws_malloc(LWS_SEND_BUFFER_PRE_PADDING +
+		conn->buf_out = (unsigned char*)lws_malloc(LWS_SEND_BUFFER_PRE_PADDING +
 					   conn->buf_out_length +
 					   LWS_SEND_BUFFER_POST_PADDING);
 		if (!conn->buf_out)
@@ -104,7 +104,7 @@ bail:
 			if (conn->buf_pre_length < total_payload) {
 				conn->buf_pre_length = total_payload;
 				lws_free(conn->buf_pre);
-				conn->buf_pre = lws_malloc(total_payload + 4);
+				conn->buf_pre = (unsigned char*)lws_malloc(total_payload + 4);
 				if (!conn->buf_pre) {
 					lwsl_err("Out of memory\n");
 					return -1;
@@ -175,7 +175,7 @@ bail:
 						LWS_MAX_ZLIB_CONN_BUFFER);
 				return -1;
 			}
-			conn->buf_in = lws_realloc(conn->buf_in,
+			conn->buf_in = (unsigned char *)lws_realloc(conn->buf_in,
 						   LWS_SEND_BUFFER_PRE_PADDING +
 						   conn->buf_in_length +
 						   LWS_SEND_BUFFER_POST_PADDING);
@@ -238,7 +238,7 @@ bail:
 						LWS_MAX_ZLIB_CONN_BUFFER);
 				return -1;
 			}
-			conn->buf_out = lws_realloc(conn->buf_out,
+			conn->buf_out = (unsigned char *)lws_realloc(conn->buf_out,
 						    LWS_SEND_BUFFER_PRE_PADDING +
 						    conn->buf_out_length +
 						    LWS_SEND_BUFFER_POST_PADDING);
@@ -285,4 +285,14 @@ bail:
 
 	return 0;
 }
-
+#ifdef __cplusplus
+int Extension_Deflate_Frame::callback(
+		struct libwebsocket_context *context,
+		struct libwebsocket_extension *ext,
+		struct libwebsocket *wsi,
+		enum libwebsocket_extension_callback_reasons reason,
+		void *user, void *in, size_t len)
+{
+	return lws_extension_callback_deflate_frame(context, ext, wsi, reason, user, in, len);
+}
+#endif

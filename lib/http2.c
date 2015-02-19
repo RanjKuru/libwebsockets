@@ -1,3 +1,5 @@
+#ifndef HTTP2_C
+#define HTTP2_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -29,7 +31,7 @@ const struct http2_settings lws_http2_default_settings = { {
 	/* LWS_HTTP2_SETTINGS__MAX_CONCURRENT_STREAMS */	 100,
 	/* LWS_HTTP2_SETTINGS__INITIAL_WINDOW_SIZE */	       65535,
 	/* LWS_HTTP2_SETTINGS__MAX_FRAME_SIZE */	       16384,
-	/* LWS_HTTP2_SETTINGS__MAX_HEADER_LIST_SIZE */		  ~0,
+	/* LWS_HTTP2_SETTINGS__MAX_HEADER_LIST_SIZE */		  0,
 }};
 
 
@@ -79,7 +81,7 @@ lws_create_server_child_wsi(struct libwebsocket_context *context, struct libwebs
 	wsi->state = WSI_STATE_HTTP2_ESTABLISHED;
 	wsi->mode = parent_wsi->mode;
 	
-	wsi->protocol = &context->protocols[0];
+	wsi->protocol = context->protocols[0];
 	libwebsocket_ensure_user_space(wsi);
 
 	lwsl_info("%s: %p new child %p, sid %d, user_space=%p\n", __func__, parent_wsi, wsi, sid, wsi->user_space);
@@ -160,7 +162,7 @@ int lws_http2_frame_write(struct libwebsocket *wsi, int type, int flags, unsigne
 		  __func__, wsi, wsi_eff, type, flags, sid, len, wsi->u.http2.tx_credit);
 	
 	if (type == LWS_HTTP2_FRAME_TYPE_DATA) {
-		if (wsi->u.http2.tx_credit < len)
+		if (wsi->u.http2.tx_credit < (int)len)
 			lwsl_err("%s: %p: sending payload len %d but tx_credit only %d!\n", len, wsi->u.http2.tx_credit);
 		wsi->u.http2.tx_credit -= len;
 	}
@@ -506,3 +508,4 @@ struct libwebsocket * lws_http2_get_nth_child(struct libwebsocket *wsi, int n)
 
 	return wsi;
 }
+#endif // HTTP2_C

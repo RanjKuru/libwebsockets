@@ -1,3 +1,5 @@
+#ifndef MINILEX_C
+#define MINILEX_C
 /*
  * minilex.c
  *
@@ -271,3 +273,4 @@ again:
 
 	return 0;
 }
+#endif // MINILEX_C

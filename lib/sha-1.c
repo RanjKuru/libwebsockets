@@ -1,3 +1,5 @@
+#ifndef SHA1_C
+#define SHA1_C
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
@@ -299,3 +301,4 @@ libwebsockets_SHA1(const unsigned char *d, size_t n, unsigned char *md)
 }
 
 #endif /*unsupported*/
+#endif // SHA1_C

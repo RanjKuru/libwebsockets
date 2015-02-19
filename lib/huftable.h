@@ -1,3 +1,5 @@
+#ifndef HUFTABLE_H
+#define HUFTABLE_H
 static unsigned char lextable[] = {
 /* pos 0000:   0 */    /* 0 */ 0x42  /* (to 0x0084 state  98) */,
                        /* 1 */ 0x01  /* (to 0x0002 state   1) */,
@@ -528,3 +530,4 @@ static unsigned char lextable[] = {
 
 /* state that points to 0x100 for disambiguation with 0x0 */
 #define HUFTABLE_0x100_PREV 118
+#endif // HUFTABLE_H

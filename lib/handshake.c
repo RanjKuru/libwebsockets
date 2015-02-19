@@ -1,3 +1,5 @@
+#ifndef HANDSHAKE_C
+#define HANDSHAKE_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -138,11 +140,11 @@ http_postbody:
 			 * what we have in the read buffer (len)
 			 * remaining portion of the POST body (content_remain)
 			 */
-			body_chunk_len = min(wsi->u.http.content_remain,len);
+			body_chunk_len = (int)min(wsi->u.http.content_remain,(int)len);
 			wsi->u.http.content_remain -= body_chunk_len;
 			len -= body_chunk_len;
 
-			if (wsi->protocol->callback) {
+			if (wsi->protocol) {
 				n = wsi->protocol->callback(
 					wsi->protocol->owning_server, wsi,
 					LWS_CALLBACK_HTTP_BODY, wsi->user_space,
@@ -155,7 +157,7 @@ http_postbody:
 			if (!wsi->u.http.content_remain)  {
 				/* he sent the content in time */
 				libwebsocket_set_timeout(wsi, NO_PENDING_TIMEOUT, 0);
-				if (wsi->protocol->callback) {
+				if (wsi->protocol) {
 					n = wsi->protocol->callback(
 						wsi->protocol->owning_server, wsi,
 						LWS_CALLBACK_HTTP_BODY_COMPLETION,
@@ -230,3 +232,4 @@ bail:
 
 	return -1;
 }
+#endif // HANDSHAKE_C

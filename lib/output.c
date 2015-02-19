@@ -1,3 +1,5 @@
+#ifndef OUTPUT_C
+#define OUTPUT_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -55,20 +57,20 @@ LWS_VISIBLE void lwsl_hexdump(void *vbuf, size_t len)
 
 	lwsl_parser("\n");
 
-	for (n = 0; n < len;) {
+	for (n = 0; n < (int)len;) {
 		start = n;
 		p = line;
 
 		p += sprintf(p, "%04X: ", start);
 
-		for (m = 0; m < 16 && n < len; m++)
+		for (m = 0; m < 16 && n < (int)len; m++)
 			p += sprintf(p, "%02X ", buf[n++]);
 		while (m++ < 16)
 			p += sprintf(p, "   ");
 
 		p += sprintf(p, "   ");
 
-		for (m = 0; m < 16 && (start + m) < len; m++) {
+		for (m = 0; m < 16 && (start + m) < (int)len; m++) {
 			if (buf[start + m] >= ' ' && buf[start + m] < 127)
 				*p++ = buf[start + m];
 			else
@@ -128,7 +130,7 @@ int lws_issue_raw(struct libwebsocket *wsi, unsigned char *buf, size_t len)
 	 */
 	lws_latency_pre(context, wsi);
 	n = lws_ssl_capable_write(wsi, buf, len);
-	lws_latency(context, wsi, "send lws_issue_raw", n, n == len);
+	lws_latency(context, wsi, "send lws_issue_raw", n, n == (int)len);
 
 	switch (n) {
 	case LWS_SSL_CAPABLE_ERROR:
@@ -167,7 +169,7 @@ handle_truncated_send:
 		return n;
 	}
 
-	if (n == real_len)
+	if (n == (int)real_len)
 		/* what we just sent went out cleanly */
 		return n;
 
@@ -198,7 +200,7 @@ handle_truncated_send:
 		lws_free(wsi->truncated_send_malloc);
 
 		wsi->truncated_send_allocation = real_len - n;
-		wsi->truncated_send_malloc = lws_malloc(real_len - n);
+		wsi->truncated_send_malloc = (unsigned char *)lws_malloc(real_len - n);
 		if (!wsi->truncated_send_malloc) {
 			lwsl_err("truncated send: unable to malloc %d\n",
 							  real_len - n);
@@ -496,7 +498,7 @@ send_raw:
 	if (n <= 0)
 		return n;
 
-	if (n == len + pre + post) {
+	if (n == (int)len + pre + post) {
 		/* everything in the buffer was handled (or rebuffered...) */
 		wsi->u.ws.inside_frame = 0;
 		return orig_len;
@@ -554,10 +556,10 @@ all_sent:
 				wsi->u.http.filepos == wsi->u.http.filelen) {
 			wsi->state = WSI_STATE_HTTP;
 
-			if (wsi->protocol->callback)
+			if (wsi->protocol)
 				/* ignore callback returned value */
 				user_callback_handle_rxflow(
-					wsi->protocol->callback, context, wsi,
+					context, wsi,
 					LWS_CALLBACK_HTTP_FILE_COMPLETION,
 					wsi->user_space, NULL, 0);
 			return 1;  /* >0 indicates completed */
@@ -604,3 +606,4 @@ lws_ssl_capable_write_no_ssl(struct libwebsocket *wsi, unsigned char *buf, int l
 	lwsl_debug("ERROR writing len %d to skt %d\n", len, n);
 	return LWS_SSL_CAPABLE_ERROR;
 }
+#endif // OUTPUT_C

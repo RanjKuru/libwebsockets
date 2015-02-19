@@ -1,3 +1,5 @@
+#ifndef GETIFADDRS_H
+#define GETIFADDRS_H
 #if HAVE_GETIFADDRS
 #include <sys/types.h>
 #include <ifaddrs.h>
@@ -74,3 +76,4 @@ void freeifaddrs(struct ifaddrs *);
 }
 #endif
 #endif
+#endif // GETIFADDRS_H

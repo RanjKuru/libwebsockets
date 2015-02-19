@@ -61,7 +61,7 @@ callback_fraggle(struct libwebsocket_context *context,
 	int n;
 	unsigned char buf[LWS_SEND_BUFFER_PRE_PADDING + 8000 +
 						  LWS_SEND_BUFFER_POST_PADDING];
-	struct per_session_data__fraggle *psf = user;
+	struct per_session_data__fraggle *psf = (struct per_session_data__fraggle *)user;
 	int chunk;
 	int write_mode = LWS_WRITE_CONTINUATION;
 	unsigned long sum;
@@ -169,7 +169,7 @@ callback_fraggle(struct libwebsocket_context *context,
 			else
 				psf->state = FRAGSTATE_POST_PAYLOAD_SUM;
 
-			n = libwebsocket_write(wsi, bp, chunk, write_mode);
+			n = libwebsocket_write(wsi, bp, chunk, (enum libwebsocket_write_protocol)write_mode);
 			if (n < 0)
 				return -1;
 			if (n < chunk) {
@@ -215,7 +215,7 @@ callback_fraggle(struct libwebsocket_context *context,
 	/* because we are protocols[0] ... */
 
 	case LWS_CALLBACK_CLIENT_CONFIRM_EXTENSION_SUPPORTED:
-		if (strcmp(in, "deflate-stream") == 0) {
+		if (strcmp((char*)in, "deflate-stream") == 0) {
 			fprintf(stderr, "denied deflate-stream extension\n");
 			return 1;
 		}
@@ -227,21 +227,36 @@ callback_fraggle(struct libwebsocket_context *context,
 
 	return 0;
 }
-
-
-
-/* list of supported protocols and callbacks */
-
-static struct libwebsocket_protocols protocols[] = {
+#ifdef __cplusplus
+class Fraggle: public libwebsocket_protocol
+{
+public:
+	Fraggle(struct libwebsocket_context *context)
 	{
-		"fraggle-protocol",
-		callback_fraggle,
-		sizeof(struct per_session_data__fraggle),
-	},
+		this->name = "fraggle-protocol";
+		this->id = 0;
+		this->per_session_data_size = sizeof(struct per_session_data__fraggle);
+		this->rx_buffer_size = 0;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~Fraggle()
 	{
-		NULL, NULL, 0		/* End of list */
-	}
+
+	};
+
+
+	virtual int
+	callback(struct libwebsocket_context *context,
+				struct libwebsocket *wsi,
+				enum libwebsocket_callback_reasons reason,
+							   void *user, void *in, size_t len)
+	{
+
+		return callback_fraggle(context, wsi, reason, user, in, len);
+	};
 };
+#endif
 
 static struct option options[] = {
 	{ "help",	no_argument,		NULL, 'h' },
@@ -258,7 +273,7 @@ int main(int argc, char **argv)
 	int n = 0;
 	int port = 7681;
 	int use_ssl = 0;
-	struct libwebsocket_context *context;
+	struct libwebsocket_context *context = NULL;
 	int opts = 0;
 	char interface_name[128] = "";
 	const char *iface = NULL;
@@ -316,7 +331,12 @@ int main(int argc, char **argv)
 
 	info.port = server_port;
 	info.iface = iface;
-	info.protocols = protocols;
+	info.protocols = lws_init_protocols(1);
+#ifdef __cplusplus
+	info.protocols[0] = new Fraggle(context);
+#else
+	info.protocols[0] = lws_build_protocol("fraggle-protocol", 0, callback_fraggle, sizeof(struct per_session_data__fraggle), 0, NULL, context);
+#endif
 #ifndef LWS_NO_EXTENSIONS
 	info.extensions = libwebsocket_get_internal_extensions();
 #endif
@@ -339,7 +359,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Connecting to %s:%u\n", address, port);
 		wsi = libwebsocket_client_connect(context, address,
 						   port, use_ssl, "/", address,
-				 "origin", protocols[PROTOCOL_FRAGGLE].name,
+				 "origin", info.protocols[PROTOCOL_FRAGGLE]->name,
 								  -1);
 		if (wsi == NULL) {
 			fprintf(stderr, "Client connect to server failed\n");

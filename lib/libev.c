@@ -1,3 +1,5 @@
+#ifndef LIBEV_C
+#define LIBEV_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -173,3 +175,4 @@ lws_libev_run(struct libwebsocket_context *context)
 	if (context->io_loop && LWS_LIBEV_ENABLED(context))
 		ev_run(context->io_loop, 0);
 }
+#endif // LIBEV_C

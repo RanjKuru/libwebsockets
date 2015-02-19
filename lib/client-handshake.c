@@ -1,3 +1,5 @@
+#ifndef CLIENT_HANDSHAKE_C
+#define CLIENT_HANDSHAKE_C
 #include "private-libwebsockets.h"
 
 struct libwebsocket *libwebsocket_client_connect_2(
@@ -321,7 +323,7 @@ libwebsocket_client_connect(struct libwebsocket_context *context,
 {
 	struct libwebsocket *wsi;
 
-	wsi = lws_zalloc(sizeof(struct libwebsocket));
+	wsi = (struct libwebsocket *)lws_zalloc(sizeof(struct libwebsocket));
 	if (wsi == NULL)
 		goto bail;
 
@@ -379,7 +381,7 @@ libwebsocket_client_connect(struct libwebsocket_context *context,
 				_WSI_TOKEN_CLIENT_SENT_PROTOCOLS, protocol))
 			goto bail1;
 
-	wsi->protocol = &context->protocols[0];
+	wsi->protocol = context->protocols[0];
 
 	/*
 	 * Check with each extension if it is able to route and proxy this
@@ -457,3 +459,4 @@ libwebsocket_client_connect_extended(struct libwebsocket_context *context,
 
 	return ws ;
 }
+#endif // CLIENT_HANDSHAKE_C

@@ -1,3 +1,5 @@
+#ifndef LWS_PLAT_WIN_C
+#define LWS_PLAT_WIN_C
 #include "private-libwebsockets.h"
 
 unsigned long long
@@ -421,3 +423,4 @@ lws_plat_inet_ntop(int af, const void *src, char *dst, int cnt)
 	lws_free(buffer);
 	return ok ? dst : NULL;
 }
+#endif // LWS_PLAT_WIN_C

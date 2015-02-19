@@ -1,3 +1,5 @@
+#ifndef LWS_PLAT_UNIX_C
+#define LWS_PLAT_UNIX_C
 #include "private-libwebsockets.h"
 
 /*
@@ -108,7 +110,7 @@ lws_plat_service(struct libwebsocket_context *context, int timeout_ms)
 
 	lws_libev_run(context);
 
-	context->service_tid = context->protocols[0].callback(context, NULL,
+	context->service_tid = context->protocols[0]->callback(context, NULL,
 				     LWS_CALLBACK_GET_THREAD_ID, NULL, NULL, 0);
 
 #ifdef LWS_OPENSSL_SUPPORT
@@ -445,3 +447,4 @@ lws_plat_inet_ntop(int af, const void *src, char *dst, int cnt)
 	return inet_ntop(af, src, dst, cnt);
 }
 #endif
+#endif // LWS_PLAT_UNIX_C

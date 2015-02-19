@@ -18,7 +18,7 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  *  MA  02110-1301  USA
  */
-
+#include <netdb.h>
 #include "private-libwebsockets.h"
 
 int log_level = LLL_ERR | LLL_WARN | LLL_NOTICE;
@@ -84,7 +84,7 @@ libwebsocket_close_and_free_session(struct libwebsocket_context *context,
 	if (wsi->mode == LWS_CONNMODE_WS_CLIENT_WAITING_CONNECT ||
 			wsi->mode == LWS_CONNMODE_WS_CLIENT_ISSUE_HANDSHAKE) {
 
-		context->protocols[0].callback(context, wsi,
+		context->protocols[0]->callback(context, wsi,
 			LWS_CALLBACK_CLIENT_CONNECTION_ERROR, wsi->user_space, NULL, 0);
 
 		lws_free_header_table(wsi);
@@ -92,7 +92,7 @@ libwebsocket_close_and_free_session(struct libwebsocket_context *context,
 	}
 
 	if (wsi->mode == LWS_CONNMODE_HTTP_SERVING)
-		context->protocols[0].callback(context, wsi,
+		context->protocols[0]->callback(context, wsi,
 			LWS_CALLBACK_CLOSED_HTTP, wsi->user_space, NULL, 0);
 
 	if (wsi->mode == LWS_CONNMODE_HTTP_SERVING_ACCEPTED) {
@@ -100,7 +100,7 @@ libwebsocket_close_and_free_session(struct libwebsocket_context *context,
 			lwsl_debug("closing http file\n");
 			compatible_file_close(wsi->u.http.fd);
 			wsi->u.http.fd = LWS_INVALID_FILE;
-			context->protocols[0].callback(context, wsi,
+			context->protocols[0]->callback(context, wsi,
 				LWS_CALLBACK_CLOSED_HTTP, wsi->user_space, NULL, 0);
 		}
 	}
@@ -240,7 +240,7 @@ just_kill_connection:
 
 	/* tell the user it's all over for this guy */
 
-	if (wsi->protocol && wsi->protocol->callback &&
+	if (wsi->protocol &&
 			((old_state == WSI_STATE_ESTABLISHED) ||
 			 (old_state == WSI_STATE_RETURNED_CLOSE_ALREADY) ||
 			 (old_state == WSI_STATE_AWAITING_CLOSE_ACK) ||
@@ -250,7 +250,7 @@ just_kill_connection:
 						      wsi->user_space, NULL, 0);
 	} else if (wsi->mode == LWS_CONNMODE_HTTP_SERVING_ACCEPTED) {
 		lwsl_debug("calling back CLOSED_HTTP\n");
-		context->protocols[0].callback(context, wsi,
+		context->protocols[0]->callback(context, wsi,
 			LWS_CALLBACK_CLOSED_HTTP, wsi->user_space, NULL, 0 );
 	} else
 		lwsl_debug("not calling back closed\n");
@@ -284,7 +284,7 @@ just_kill_connection:
 	}
 
 	/* outermost destroy notification for wsi (user_space still intact) */
-	context->protocols[0].callback(context, wsi,
+	context->protocols[0]->callback(context, wsi,
 			LWS_CALLBACK_WSI_DESTROY, wsi->user_space, NULL, 0);
 
 	if (wsi->protocol && wsi->protocol->per_session_data_size &&
@@ -406,7 +406,7 @@ libwebsockets_get_peer_addresses(struct libwebsocket_context *context,
 		p = &sin4;
 	}
 
-	if (getpeername(fd, p, &len) < 0) {
+	if (getpeername(fd, (struct sockaddr *)p, &len) < 0) {
 		lwsl_warn("getpeername: %s\n", strerror(LWS_ERRNO));
 		goto bail;
 	}
@@ -443,7 +443,7 @@ libwebsocket_context_user(struct libwebsocket_context *context)
 
 LWS_VISIBLE int
 libwebsocket_callback_all_protocol(
-		const struct libwebsocket_protocols *protocol, int reason)
+		struct libwebsocket_protocol *protocol, int reason)
 {
 	struct libwebsocket_context *context = protocol->owning_server;
 	int n;
@@ -455,7 +455,7 @@ libwebsocket_callback_all_protocol(
 			continue;
 		if (wsi->protocol == protocol)
 			protocol->callback(context, wsi,
-					reason, wsi->user_space, NULL, 0);
+					(enum libwebsocket_callback_reasons)reason, wsi->user_space, NULL, 0);
 	}
 
 	return 0;
@@ -555,7 +555,7 @@ lws_latency(struct libwebsocket_context *context, struct libwebsocket *wsi,
 LWS_VISIBLE int
 libwebsocket_rx_flow_control(struct libwebsocket *wsi, int enable)
 {
-	if (enable == (wsi->rxflow_change_to & LWS_RXFLOW_ALLOW))
+	if (enable == (int)(wsi->rxflow_change_to & LWS_RXFLOW_ALLOW))
 		return 0;
 
 	lwsl_info("libwebsocket_rx_flow_control(0x%p, %d)\n", wsi, enable);
@@ -576,7 +576,7 @@ libwebsocket_rx_flow_control(struct libwebsocket *wsi, int enable)
 
 LWS_VISIBLE void
 libwebsocket_rx_flow_allow_all_protocol(
-				const struct libwebsocket_protocols *protocol)
+				 struct libwebsocket_protocol *protocol)
 {
 	struct libwebsocket_context *context = protocol->owning_server;
 	int n;
@@ -607,15 +607,14 @@ libwebsocket_canonical_hostname(struct libwebsocket_context *context)
 	return (const char *)context->canonical_hostname;
 }
 
-int user_callback_handle_rxflow(callback_function callback_function,
-		struct libwebsocket_context *context,
+int user_callback_handle_rxflow(struct libwebsocket_context *context,
 			struct libwebsocket *wsi,
 			 enum libwebsocket_callback_reasons reason, void *user,
 							  void *in, size_t len)
 {
 	int n;
 
-	n = callback_function(context, wsi, reason, user, in, len);
+	n = wsi->protocol->callback(context, wsi, reason, user, in, len);
 	if (!n)
 		n = _libwebsocket_rx_flow_control(wsi);
 
@@ -679,7 +678,7 @@ libwebsocket_set_proxy(struct libwebsocket_context *context, const char *proxy)
  *	this is how you can get a pointer to the active protocol if needed.
  */
 
-LWS_VISIBLE const struct libwebsocket_protocols *
+LWS_VISIBLE struct libwebsocket_protocol *
 libwebsockets_get_protocol(struct libwebsocket *wsi)
 {
 	return wsi->protocol;
@@ -758,6 +757,90 @@ LWS_VISIBLE void _lws_log(int filter, const char *format, ...)
 	va_end(ap);
 }
 
+LWS_VISIBLE LWS_EXTERN struct libwebsocket_protocol**
+lws_init_protocols(size_t size)
+{
+	size++;
+	struct libwebsocket_protocol** protocols = (struct libwebsocket_protocol**)lws_zalloc(sizeof(struct libwebsocket_protocol*) * size);
+	unsigned int i = 0;
+	while (i < size)
+		protocols[i++] = NULL;
+	return protocols;
+}
+
+#ifndef __cplusplus
+LWS_VISIBLE LWS_EXTERN struct libwebsocket_protocol*
+lws_build_protocol(const char *name, unsigned int id, callback_function *callback, size_t per_session_data_size, size_t rx_buffer_size, void *user, struct libwebsocket_context *owning_server)
+{
+	if (!name || strlen(name) == 0 || !callback)
+		return NULL;
+	struct libwebsocket_protocol* protocol = (struct libwebsocket_protocol*)lws_zalloc(sizeof(struct libwebsocket_protocol));
+	protocol->name = name;
+	protocol->per_session_data_size = per_session_data_size;
+	protocol->rx_buffer_size = rx_buffer_size;
+	protocol->user = user;
+	protocol->owning_server = owning_server;
+	protocol->id = id;
+	protocol->protocol_index = 0;
+	protocol->callback = callback;
+	return protocol;
+
+}
+#endif
+
+LWS_VISIBLE LWS_EXTERN
+void lws_destroy_protocol(struct libwebsocket_protocol *protocol)
+{
+	free(protocol);
+}
+
+LWS_VISIBLE LWS_EXTERN
+void lws_dispose_protocols(struct libwebsocket_protocol **protocols)
+{
+	unsigned int i = 0;
+	while(protocols[i])
+		lws_destroy_protocol(protocols[i++]);
+
+}
+
+LWS_VISIBLE LWS_EXTERN struct libwebsocket_extension**
+lws_init_extensions(size_t size)
+{
+	size++;
+	struct libwebsocket_extension** extensions = (struct libwebsocket_extension**)lws_zalloc(sizeof(struct libwebsocket_extension*) * size);
+	unsigned int i = 0;
+	while (i < size)
+		extensions[i++] = NULL;
+	return extensions;
+}
+
+#ifndef __cplusplus
+LWS_VISIBLE LWS_EXTERN struct libwebsocket_extension*
+lws_build_extension(const char *name, extension_callback_function *callback, size_t per_session_data_size, void *per_context_private_data)
+{
+	if (!name || strlen(name) == 0 || !callback)
+		return NULL;
+	struct libwebsocket_extension* extension = (struct libwebsocket_extension*)lws_zalloc(sizeof(struct libwebsocket_extension));
+	extension->name = name;
+	extension->per_session_data_size = per_session_data_size;
+	extension->per_context_private_data = per_context_private_data;
+	extension->callback = callback;
+	return extension;
+}
+#endif
+
+LWS_VISIBLE LWS_EXTERN
+void lws_destroy_extension(struct libwebsocket_extension *extension)
+{
+	free(extension);
+}
+LWS_VISIBLE LWS_EXTERN
+void lws_dispose_extensions(struct libwebsocket_extension **extensions)
+{
+	unsigned int i = 0;
+	while(extensions[i])
+		lws_destroy_extension(extensions[i++]);
+}
 /**
  * lws_set_log_level() - Set the logging bitfield
  * @level:	OR together the LLL_ debug contexts you want output from

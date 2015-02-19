@@ -1,31 +1,14 @@
+#ifndef EXTENSION_C
+#define EXTENSION_C
 #include "private-libwebsockets.h"
 
-#include "extension-deflate-frame.h"
-#include "extension-deflate-stream.h"
-
-struct libwebsocket_extension libwebsocket_internal_extensions[] = {
 #ifdef LWS_EXT_DEFLATE_STREAM
-	{
-		"deflate-stream",
-		lws_extension_callback_deflate_stream,
-		sizeof(struct lws_ext_deflate_stream_conn)
-	},
+#define EXTENSION_SIZE 1
+#include "extension-deflate-stream.h"
 #else
-	{
-		"x-webkit-deflate-frame",
-		lws_extension_callback_deflate_frame,
-		sizeof(struct lws_ext_deflate_frame_conn)
-	},
-	{
-		"deflate-frame",
-		lws_extension_callback_deflate_frame,
-		sizeof(struct lws_ext_deflate_frame_conn)
-	},
+#define EXTENSION_SIZE 2
+#include "extension-deflate-frame.h"
 #endif
-	{ /* terminator */
-		NULL, NULL, 0
-	}
-};
 
 LWS_VISIBLE void
 lws_context_init_extensions(struct lws_context_creation_info *info,
@@ -35,8 +18,27 @@ lws_context_init_extensions(struct lws_context_creation_info *info,
 	lwsl_info(" LWS_MAX_EXTENSIONS_ACTIVE: %u\n", LWS_MAX_EXTENSIONS_ACTIVE);
 }
 
-LWS_VISIBLE struct libwebsocket_extension *libwebsocket_get_internal_extensions()
+LWS_VISIBLE struct libwebsocket_extension **libwebsocket_get_internal_extensions()
 {
+	struct libwebsocket_extension **libwebsocket_internal_extensions = lws_init_extensions(EXTENSION_SIZE);
+#ifdef LWS_EXT_DEFLATE_STREAM
+	const char* name = "deflate-stream";
+#ifdef __cplusplus
+	libwebsocket_internal_extensions[0] = new Extension_Deflate_Stream(name);
+#else
+	libwebsocket_internal_extensions[0] = lws_build_extension(name, lws_extension_callback_deflate_stream, sizeof(struct lws_ext_deflate_stream_conn), NULL);
+#endif
+#else
+	const char* name0 = "x-webkit-deflate-frame";
+	const char* name1 = "deflate-frame";
+#ifdef __cplusplus
+	libwebsocket_internal_extensions[0] = new Extension_Deflate_Frame(name0);
+	libwebsocket_internal_extensions[1] = new Extension_Deflate_Frame(name1);
+#else
+	libwebsocket_internal_extensions[0] = lws_build_extension(name0, lws_extension_callback_deflate_frame, sizeof(struct lws_ext_deflate_frame_conn), NULL);
+	libwebsocket_internal_extensions[1] = lws_build_extension(name1, lws_extension_callback_deflate_frame, sizeof(struct lws_ext_deflate_frame_conn), NULL);
+#endif
+#endif
 	return libwebsocket_internal_extensions;
 }
 
@@ -52,7 +54,7 @@ int lws_ext_callback_for_each_active(struct libwebsocket *wsi, int reason,
 		m = wsi->active_extensions[n]->callback(
 			wsi->protocol->owning_server,
 			wsi->active_extensions[n], wsi,
-			reason,
+			(enum libwebsocket_extension_callback_reasons)reason,
 			wsi->active_extensions_user[n],
 			arg, len);
 		if (m < 0) {
@@ -72,12 +74,12 @@ int lws_ext_callback_for_each_extension_type(
 		struct libwebsocket_context *context, struct libwebsocket *wsi,
 				int reason, void *arg, int len)
 {
-	int n = 0, m, handled = 0;
-	struct libwebsocket_extension *ext = context->extensions;
+	int n = 0, i = 0, m, handled = 0;
 
-	while (ext && ext->callback && !handled) {
-		m = ext->callback(context, ext, wsi, reason,
+	while (context->extensions[i] && !handled) {
+		m = context->extensions[i]->callback(context, context->extensions[i], wsi, (enum libwebsocket_extension_callback_reasons)reason,
 						(void *)(long)n, arg, len);
+
 		if (m < 0) {
 			lwsl_ext(
 			 "Extension '%s' failed to handle callback %d!\n",
@@ -87,10 +89,10 @@ int lws_ext_callback_for_each_extension_type(
 		if (m)
 			handled = 1;
 
-		ext++;
+		i++;
 		n++;
 	}
-	
+
 	return 0;
 }
 
@@ -196,7 +198,7 @@ lws_any_extension_handled(struct libwebsocket_context *context,
 	/* maybe an extension will take care of it for us */
 
 	for (n = 0; n < wsi->count_active_extensions && !handled; n++) {
-		if (!wsi->active_extensions[n]->callback)
+		if (!wsi->active_extensions[n])
 			continue;
 
 		handled |= wsi->active_extensions[n]->callback(context,
@@ -206,3 +208,4 @@ lws_any_extension_handled(struct libwebsocket_context *context,
 
 	return handled;
 }
+#endif // EXTENSION_C

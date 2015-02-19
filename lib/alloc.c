@@ -1,3 +1,5 @@
+#ifndef ALLOC_C
+#define ALLOC_C
 #include "private-libwebsockets.h"
 
 static void *_realloc(void *ptr, size_t size)
@@ -28,3 +30,4 @@ void lws_set_allocator(void *(*cb)(void *ptr, size_t size))
 {
 	_lws_realloc = cb;
 }
+#endif // ALLOC_C

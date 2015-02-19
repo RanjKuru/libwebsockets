@@ -4,8 +4,8 @@
 #include <string.h>
 #include <assert.h>
 
-#define LWS_ZLIB_WINDOW_BITS 15
-#define LWS_ZLIB_MEMLEVEL 8
+#define DEFLATE_STREAM_CHUNK 128
+#define DEFLATE_STREAM_COMPRESSION_LEVEL 1
 
 int lws_extension_callback_deflate_stream(
 		struct libwebsocket_context *context,
@@ -164,3 +164,14 @@ int lws_extension_callback_deflate_stream(
 
 	return 0;
 }
+#ifdef __cplusplus
+int Extension_Deflate_Stream::callback(
+		struct libwebsocket_context *context,
+		struct libwebsocket_extension *ext,
+		struct libwebsocket *wsi,
+			enum libwebsocket_extension_callback_reasons reason,
+					       void *user, void *in, size_t len)
+{
+	return lws_extension_callback_deflate_stream(context, ext, wsi,reason, user, in, len);
+}
+#endif

@@ -1,3 +1,5 @@
+#ifndef LEXTABLE_STRINGS_H
+#define LEXTABLE_STRINGS_H
 /* set of parsable strings -- ALL LOWER CASE */
 
 static const char *set[] = {
@@ -88,3 +90,4 @@ static const char *set[] = {
 	"", /* not matchable */
 
 };
+#endif // LEXTABLE_STRINGS_H

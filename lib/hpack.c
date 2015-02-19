@@ -1,3 +1,5 @@
+#ifndef HPACK_C
+#define HPACK_C
 /*
  * lib/hpack.c
  *
@@ -236,9 +238,9 @@ static int lws_frag_end(struct libwebsocket *wsi)
 static void lws_dump_header(struct libwebsocket *wsi, int hdr)
 {
 	char s[200];
-	int len = lws_hdr_copy(wsi, s, sizeof(s) - 1, hdr);
+	int len = (int)lws_hdr_copy(wsi, s, sizeof(s) - 1, (enum lws_token_indexes)hdr);
 	s[len] = '\0';
-	lwsl_info("  hdr tok %d (%s) = '%s'\n", hdr, lws_token_to_string(hdr), s);
+	lwsl_info("  hdr tok %d (%s) = '%s'\n", hdr, lws_token_to_string((enum lws_token_indexes)hdr), s);
 }
 
 static int lws_token_from_index(struct libwebsocket *wsi, int index, char **arg, int *len)
@@ -251,7 +253,7 @@ static int lws_token_from_index(struct libwebsocket *wsi, int index, char **arg,
 	
 	dyn = wsi->u.http2.hpack_dyn_table;
 
-	if (index < ARRAY_SIZE(static_token))
+	if (index < (int)ARRAY_SIZE(static_token))
 		return static_token[index];
 
 	if (!dyn)
@@ -278,16 +280,16 @@ static int lws_hpack_add_dynamic_header(struct libwebsocket *wsi, int token, cha
 	dyn = wsi->u.http2.hpack_dyn_table;
 
 	if (!dyn) {
-		dyn = lws_zalloc(sizeof(*dyn));
+		dyn = (struct hpack_dynamic_table *)lws_zalloc(sizeof(*dyn));
 		if (!dyn)
 			return 1;
 		wsi->u.http2.hpack_dyn_table = dyn;
 		
-		dyn->args = lws_malloc(1024);
+		dyn->args = (char *)lws_malloc(1024);
 		if (!dyn->args)
 			goto bail1;
 		dyn->args_length = 1024;
-		dyn->entries = lws_malloc(sizeof(dyn->entries[0]) * 20);
+		dyn->entries = (struct hpack_dt_entry*)lws_malloc(sizeof(dyn->entries[0]) * 20);
 		if (!dyn->entries)
 			goto bail2;
 		dyn->num_entries = 20;
@@ -305,7 +307,7 @@ static int lws_hpack_add_dynamic_header(struct libwebsocket *wsi, int token, cha
 		memcpy(dyn->args + dyn->pos, arg, len);
 	dyn->entries[dyn->next].arg_len = len;
 	
-	lwsl_info("%s: added dynamic hdr %d, token %d (%s), len %d\n", __func__, dyn->next, token, lws_token_to_string(token), len);
+	lwsl_info("%s: added dynamic hdr %d, token %d (%s), len %d\n", __func__, dyn->next, token, lws_token_to_string((enum lws_token_indexes)token), len);
 	
 	dyn->pos += len;
 	dyn->next++;
@@ -326,12 +328,12 @@ static int lws_write_indexed_hdr(struct libwebsocket *wsi, int idx)
 	const char *p;
 	int tok = lws_token_from_index(wsi, idx, NULL, 0);
 
-	lwsl_info("writing indexed hdr %d (tok %d '%s')\n", idx, tok, lws_token_to_string(tok));
+	lwsl_info("writing indexed hdr %d (tok %d '%s')\n", idx, tok, lws_token_to_string((enum lws_token_indexes)tok));
 
 	if (lws_frag_start(wsi, tok))
 		return 1;
 
-	if (idx < ARRAY_SIZE(http2_canned)) {
+	if (idx < (int)ARRAY_SIZE(http2_canned)) {
 		p = http2_canned[idx];
 		while (*p)
 			if (lws_frag_append(wsi, *p++))
@@ -589,7 +591,7 @@ static int lws_http2_num(int starting_bits, unsigned long num, unsigned char **p
 {
 	int mask = (1 << starting_bits) - 1;
 
-	if (num < mask) {
+	if ((int)num < mask) {
 		*((*p)++) |= num;
 		return *p >= end;
 	}
@@ -681,3 +683,4 @@ int lws_add_http2_header_status(struct libwebsocket_context *context,
 
 	return 0;
 }
+#endif // HPACK_C

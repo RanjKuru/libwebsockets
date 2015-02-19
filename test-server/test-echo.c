@@ -143,21 +143,34 @@ do_rx:
 
 	return 0;
 }
-
-
-
-static struct libwebsocket_protocols protocols[] = {
-	/* first protocol must always be HTTP handler */
-
+#ifdef __cplusplus
+class Echo: public libwebsocket_protocol
+{
+public:
+	Echo(struct libwebsocket_context *context)
 	{
-		"default",		/* name */
-		callback_echo,		/* callback */
-		sizeof(struct per_session_data__echo)	/* per_session_data_size */
-	},
+		this->name = "default";
+		this->id = 0;
+		this->per_session_data_size = sizeof(struct per_session_data__echo);
+		this->rx_buffer_size = 0;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~Echo()
 	{
-		NULL, NULL, 0		/* End of list */
-	}
+
+	};
+
+	virtual int
+	callback(struct libwebsocket_context *context,
+			struct libwebsocket *wsi,
+			enum libwebsocket_callback_reasons reason, void *user,
+								   void *in, size_t len)
+	{
+		return callback_echo(context, wsi, reason, user, in, len);
+	};
 };
+#endif
 
 void sighandler(int sig)
 {
@@ -190,7 +203,7 @@ int main(int argc, char **argv)
 	int n = 0;
 	int port = 7681;
 	int use_ssl = 0;
-	struct libwebsocket_context *context;
+	struct libwebsocket_context *context = NULL;
 	int opts = 0;
 	char interface_name[128] = "";
 	const char *interface = NULL;
@@ -362,7 +375,12 @@ int main(int argc, char **argv)
 
 	info.port = listen_port;
 	info.iface = interface;
-	info.protocols = protocols;
+	info.protocols = lws_init_protocols(1);
+#ifdef __cplusplus
+	info.protocols[0] = new Echo(context);
+#else
+	info.protocols[0] = lws_build_protocol("default", 0, callback_echo, sizeof(struct per_session_data__echo), 0, NULL, context);
+#endif
 #ifndef LWS_NO_EXTENSIONS
 	info.extensions = libwebsocket_get_internal_extensions();
 #endif
@@ -413,7 +431,7 @@ int main(int argc, char **argv)
 			gettimeofday(&tv, NULL);
 
 			if (((unsigned int)tv.tv_usec - oldus) > (unsigned int)rate_us) {
-				libwebsocket_callback_on_writable_all_protocol(&protocols[0]);
+				libwebsocket_callback_on_writable_all_protocol(info.protocols[0]);
 				oldus = tv.tv_usec;
 			}
 		}

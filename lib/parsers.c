@@ -1,3 +1,5 @@
+#ifndef PARSERS_C
+#define PARSERS_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -63,7 +65,7 @@ int lws_allocate_header_table(struct libwebsocket *wsi)
 {
 	/* Be sure to free any existing header data to avoid mem leak: */
 	lws_free_header_table(wsi);
-	wsi->u.hdr.ah = lws_malloc(sizeof(*wsi->u.hdr.ah));
+	wsi->u.hdr.ah = (struct allocated_headers *)lws_malloc(sizeof(*wsi->u.hdr.ah));
 	if (wsi->u.hdr.ah == NULL) {
 		lwsl_err("Out of memory\n");
 		return -1;
@@ -223,7 +225,7 @@ int libwebsocket_parse(
 				      wsi->u.hdr.parser_state]].len && c == ' ')
 			break;
 
-		for (m = 0; m < ARRAY_SIZE(methods); m++)
+		for (m = 0; m < (int)ARRAY_SIZE(methods); m++)
 			if (wsi->u.hdr.parser_state == methods[m])
 				break;
 		if (m == ARRAY_SIZE(methods))
@@ -408,7 +410,7 @@ swallow:
 
 		if (wsi->u.hdr.lextable_pos < 0) {
 			/* this is not a header we know about */
-			for (m = 0; m < ARRAY_SIZE(methods); m++)
+			for (m = 0; m < (int)ARRAY_SIZE(methods); m++)
 				if (wsi->u.hdr.ah->frag_index[methods[m]]) {
 					/*
 					 * already had the method, no idea what
@@ -435,7 +437,7 @@ swallow:
 					lextable[wsi->u.hdr.lextable_pos + 1];
 
 			lwsl_parser("known hdr %d\n", n);
-			for (m = 0; m < ARRAY_SIZE(methods); m++)
+			for (m = 0; m < (int)ARRAY_SIZE(methods); m++)
 				if (n == methods[m] &&
 						wsi->u.hdr.ah->frag_index[
 							methods[m]]) {
@@ -836,7 +838,7 @@ handle_first:
 		else
 			if (wsi->protocol->rx_buffer_size &&
 					wsi->u.ws.rx_user_buffer_head !=
-						  wsi->protocol->rx_buffer_size)
+						  (int)wsi->protocol->rx_buffer_size)
 			break;
 
 		/* spill because we filled our rx buffer */
@@ -893,13 +895,13 @@ spill:
 			
 			/* if existing buffer is too small, drop it */
 			if (wsi->u.ws.ping_payload_buf &&
-			    wsi->u.ws.ping_payload_alloc < wsi->u.ws.rx_user_buffer_head) {
+					(int)wsi->u.ws.ping_payload_alloc < wsi->u.ws.rx_user_buffer_head) {
 				lws_free2(wsi->u.ws.ping_payload_buf);
 			}
 
 			/* if no buffer, allocate it */
 			if (!wsi->u.ws.ping_payload_buf) {
-				wsi->u.ws.ping_payload_buf = lws_malloc(wsi->u.ws.rx_user_buffer_head
+				wsi->u.ws.ping_payload_buf = (unsigned char *)lws_malloc(wsi->u.ws.rx_user_buffer_head
 									+ LWS_SEND_BUFFER_PRE_PADDING);
 				wsi->u.ws.ping_payload_alloc = wsi->u.ws.rx_user_buffer_head;
 			}
@@ -967,9 +969,8 @@ ping_drop:
 		if (eff_buf.token_len > 0) {
 			eff_buf.token[eff_buf.token_len] = '\0';
 
-			if (wsi->protocol->callback)
+			if (wsi->protocol)
 				ret = user_callback_handle_rxflow(
-						wsi->protocol->callback,
 						wsi->protocol->owning_server,
 						wsi, LWS_CALLBACK_RECEIVE,
 						wsi->user_space,
@@ -1015,3 +1016,4 @@ libwebsockets_remaining_packet_payload(struct libwebsocket *wsi)
 {
 	return wsi->u.ws.rx_packet_length;
 }
+#endif // PARSERS_C

@@ -1,3 +1,5 @@
+#ifndef SERVICE_C
+#define SERVICE_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -39,7 +41,7 @@ lws_calllback_as_writeable(struct libwebsocket_context *context,
 		break;
 	}
 	lwsl_info("%s: %p (user=%p)\n", __func__, wsi, wsi->user_space);
-	return user_callback_handle_rxflow(wsi->protocol->callback, context,
+	return user_callback_handle_rxflow(context,
 			wsi, (enum libwebsocket_callback_reasons) n,
 						      wsi->user_space, NULL, 0);
 }
@@ -301,7 +303,7 @@ int lws_rxflow_cache(struct libwebsocket *wsi, unsigned char *buf, int n, int le
 
 	/* a new rxflow, buffer it and warn caller */
 	lwsl_info("new rxflow input buffer len %d\n", len - n);
-	wsi->rxflow_buffer = lws_malloc(len - n);
+	wsi->rxflow_buffer = (unsigned char *)lws_malloc(len - n);
 	wsi->rxflow_len = len - n;
 	wsi->rxflow_pos = 0;
 	memcpy(wsi->rxflow_buffer, buf + n, len - n);
@@ -632,4 +634,4 @@ libwebsocket_service(struct libwebsocket_context *context, int timeout_ms)
 {
 	return lws_plat_service(context, timeout_ms);
 }
-
+#endif // SERVICE_C

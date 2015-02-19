@@ -70,9 +70,8 @@ enum demo_protocols {
 
 
 /* dumb_increment protocol */
-
 static int
-callback_dumb_increment(struct libwebsocket_context *this,
+callback_dumb_increment(struct libwebsocket_context *context,
 			struct libwebsocket *wsi,
 			enum libwebsocket_callback_reasons reason,
 					       void *user, void *in, size_t len)
@@ -101,15 +100,15 @@ callback_dumb_increment(struct libwebsocket_context *this,
 	/* because we are protocols[0] ... */
 
 	case LWS_CALLBACK_CLIENT_CONFIRM_EXTENSION_SUPPORTED:
-		if ((strcmp(in, "deflate-stream") == 0) && deny_deflate) {
+		if ((strcmp((char *)in, "deflate-stream") == 0) && deny_deflate) {
 			fprintf(stderr, "denied deflate-stream extension\n");
 			return 1;
 		}
-		if ((strcmp(in, "deflate-frame") == 0) && deny_deflate) {
+		if ((strcmp((char *)in, "deflate-frame") == 0) && deny_deflate) {
 			fprintf(stderr, "denied deflate-frame extension\n");
 			return 1;
 		}
-		if ((strcmp(in, "x-google-mux") == 0) && deny_mux) {
+		if ((strcmp((char *)in, "x-google-mux") == 0) && deny_mux) {
 			fprintf(stderr, "denied x-google-mux extension\n");
 			return 1;
 		}
@@ -122,11 +121,34 @@ callback_dumb_increment(struct libwebsocket_context *this,
 
 	return 0;
 }
+#ifdef __cplusplus
+class DumbIncrement: public libwebsocket_protocol
+{
+public:
+	DumbIncrement(struct libwebsocket_context *context)
+	{
+		this->name = "dumb-increment-protocol,fake-nonexistant-protocol";
+		this->id = 0;
+		this->per_session_data_size = 0;
+		this->rx_buffer_size = 20;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~DumbIncrement()
+	{
+	};
 
-
+	virtual int
+	callback(struct libwebsocket_context *context,
+				struct libwebsocket *wsi,
+				enum libwebsocket_callback_reasons reason,
+							   void *user, void *in, size_t len)
+	{
+		return callback_dumb_increment(context, wsi, reason, user, in, len);
+	};
+};
+#endif
 /* lws-mirror_protocol */
-
-
 static int
 callback_lws_mirror(struct libwebsocket_context *context,
 			struct libwebsocket *wsi,
@@ -191,7 +213,7 @@ callback_lws_mirror(struct libwebsocket_context *context,
 		}
 
 		n = libwebsocket_write(wsi,
-		   &buf[LWS_SEND_BUFFER_PRE_PADDING], l, opts | LWS_WRITE_TEXT);
+		   &buf[LWS_SEND_BUFFER_PRE_PADDING], l, (enum libwebsocket_write_protocol)(opts | LWS_WRITE_TEXT));
 
 		if (n < 0)
 			return -1;
@@ -215,25 +237,33 @@ callback_lws_mirror(struct libwebsocket_context *context,
 
 	return 0;
 }
-
-
-/* list of supported protocols and callbacks */
-
-static struct libwebsocket_protocols protocols[] = {
+#ifdef __cplusplus
+class Mirror: public libwebsocket_protocol
+{
+public:
+	Mirror(struct libwebsocket_context *context)
 	{
-		"dumb-increment-protocol,fake-nonexistant-protocol",
-		callback_dumb_increment,
-		0,
-		20,
-	},
+		this->name = "fake-nonexistant-protocol,lws-mirror-protocol";
+		this->id = 0;
+		this->per_session_data_size = 0;
+		this->rx_buffer_size = 128;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~Mirror()
 	{
-		"fake-nonexistant-protocol,lws-mirror-protocol",
-		callback_lws_mirror,
-		0,
-		128,
-	},
-	{ NULL, NULL, 0, 0 } /* end */
+
+	}
+	virtual int
+	callback(struct libwebsocket_context *context,
+				struct libwebsocket *wsi,
+				enum libwebsocket_callback_reasons reason,
+							   void *user, void *in, size_t len)
+	{
+		return callback_lws_mirror(context, wsi, reason, user, in, len);
+	};
 };
+#endif
 
 void sighandler(int sig)
 {
@@ -259,7 +289,7 @@ int main(int argc, char **argv)
 	int ret = 0;
 	int port = 7681;
 	int use_ssl = 0;
-	struct libwebsocket_context *context;
+	struct libwebsocket_context *context = NULL;
 	const char *address;
 	struct libwebsocket *wsi_dumb;
 	int ietf_version = -1; /* latest */
@@ -321,7 +351,14 @@ int main(int argc, char **argv)
 	 */
 
 	info.port = CONTEXT_PORT_NO_LISTEN;
-	info.protocols = protocols;
+	info.protocols = lws_init_protocols(2);
+#ifdef __cplusplus
+	info.protocols[0] = new DumbIncrement(context);
+	info.protocols[1] = new Mirror(context);
+#else
+	info.protocols[0] = lws_build_protocol("dumb-increment-protocol,fake-nonexistant-protocol", 0, callback_dumb_increment, 0, 20, NULL, context);
+	info.protocols[1] = lws_build_protocol("fake-nonexistant-protocol,lws-mirror-protocol", 0, callback_lws_mirror, 0, 128, NULL, context);
+#endif
 #ifndef LWS_NO_EXTENSIONS
 	info.extensions = libwebsocket_get_internal_extensions();
 #endif
@@ -338,7 +375,7 @@ int main(int argc, char **argv)
 
 	wsi_dumb = libwebsocket_client_connect(context, address, port, use_ssl,
 			"/", argv[optind], argv[optind],
-			 protocols[PROTOCOL_DUMB_INCREMENT].name, ietf_version);
+			info.protocols[PROTOCOL_DUMB_INCREMENT]->name, ietf_version);
 
 	if (wsi_dumb == NULL) {
 		fprintf(stderr, "libwebsocket connect failed\n");
@@ -370,7 +407,7 @@ int main(int argc, char **argv)
 		wsi_mirror = libwebsocket_client_connect(context,
 			address, port, use_ssl,  "/",
 			argv[optind], argv[optind],
-			protocols[PROTOCOL_LWS_MIRROR].name, ietf_version);
+			info.protocols[PROTOCOL_LWS_MIRROR]->name, ietf_version);
 
 		if (wsi_mirror == NULL) {
 			fprintf(stderr, "libwebsocket "

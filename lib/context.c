@@ -1,3 +1,6 @@
+#ifndef CONTEXT_C
+#define CONTEXT_C
+
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -75,6 +78,10 @@ LWS_VISIBLE struct libwebsocket_context *
 libwebsocket_create_context(struct lws_context_creation_info *info)
 {
 	struct libwebsocket_context *context = NULL;
+	if (!info->protocols[0])
+	{
+		return context;
+	}
 	char *p;
 #ifdef _WIN32
 	int i;
@@ -102,18 +109,18 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 
 	if (lws_plat_context_early_init())
 		return NULL;
-
-	context = lws_zalloc(sizeof(struct libwebsocket_context));
+	lwsl_info("TEst2");
+	context = (struct libwebsocket_context *)lws_zalloc(sizeof(struct libwebsocket_context));
 	if (!context) {
 		lwsl_err("No memory for websocket context\n");
 		return NULL;
 	}
-
+	lwsl_info("TEst2");
 	if (pid_daemon) {
 		context->started_with_parent = pid_daemon;
 		lwsl_notice(" Started with daemon pid %d\n", pid_daemon);
 	}
-
+	lwsl_info("TEst2");
 	context->listen_service_extraseen = 0;
 	context->protocols = info->protocols;
 	context->token_limits = info->token_limits;
@@ -125,7 +132,7 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 	context->ka_time = info->ka_time;
 	context->ka_interval = info->ka_interval;
 	context->ka_probes = info->ka_probes;
-
+	lwsl_info("TEst2");
 	/* to reduce this allocation, */
 	context->max_fds = getdtablesize();
 	lwsl_notice(" static allocation: %u + (%u x %u fds) = %u bytes\n",
@@ -138,7 +145,7 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 					sizeof(struct libwebsocket *)) *
 							     context->max_fds));
 
-	context->fds = lws_zalloc(sizeof(struct libwebsocket_pollfd) *
+	context->fds = (struct libwebsocket_pollfd *)lws_zalloc(sizeof(struct libwebsocket_pollfd) *
 				  context->max_fds);
 	if (context->fds == NULL) {
 		lwsl_err("Unable to allocate fds array for %d connections\n",
@@ -152,7 +159,7 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 		context->fd_hashtable[i].wsi = lws_zalloc(sizeof(struct libwebsocket*) * context->max_fds);
 	}
 #else
-	context->lws_lookup = lws_zalloc(sizeof(struct libwebsocket *) * context->max_fds);
+	context->lws_lookup = (struct libwebsocket **)lws_zalloc(sizeof(struct libwebsocket *) * context->max_fds);
 	if (context->lws_lookup == NULL) {
 		lwsl_err(
 		  "Unable to allocate lws_lookup array for %d connections\n",
@@ -181,7 +188,6 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 	lws_server_get_canonical_hostname(context, info);
 
 	/* split the proxy ads:port if given */
-
 	if (info->http_proxy_address) {
 		strncpy(context->http_proxy_address, info->http_proxy_address,
 				      sizeof(context->http_proxy_address) - 1);
@@ -207,7 +213,6 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 		}
 #endif
 	}
-
 	if (context->http_proxy_address[0])
 		lwsl_notice(" Proxy %s:%u\n",
 				context->http_proxy_address,
@@ -217,6 +222,7 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 		" per-conn mem: %u + %u headers + protocol rx buf\n",
 				sizeof(struct libwebsocket),
 					      sizeof(struct allocated_headers));
+
 
 	if (lws_context_init_server_ssl(info, context))
 		goto bail;
@@ -232,27 +238,28 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 	 * to listen on port < 1023 we would have needed root, but now we are
 	 * listening, we don't want the power for anything else
 	 */
+
 	lws_plat_drop_app_privileges(info);
 
 	/* initialize supported protocols */
 
 	for (context->count_protocols = 0;
-		info->protocols[context->count_protocols].callback;
+			info->protocols[context->count_protocols];
 						   context->count_protocols++) {
 
 		lwsl_parser("  Protocol: %s\n",
-				info->protocols[context->count_protocols].name);
+				info->protocols[context->count_protocols]->name);
 
-		info->protocols[context->count_protocols].owning_server =
+		info->protocols[context->count_protocols]->owning_server =
 									context;
-		info->protocols[context->count_protocols].protocol_index =
+		info->protocols[context->count_protocols]->protocol_index =
 						       context->count_protocols;
 
 		/*
 		 * inform all the protocols that they are doing their one-time
 		 * initialization if they want to
 		 */
-		info->protocols[context->count_protocols].callback(context,
+		info->protocols[context->count_protocols]->callback(context,
 			       NULL, LWS_CALLBACK_PROTOCOL_INIT, NULL, NULL, 0);
 	}
 
@@ -290,8 +297,7 @@ bail:
 LWS_VISIBLE void
 libwebsocket_context_destroy(struct libwebsocket_context *context)
 {
-	int n;
-	struct libwebsocket_protocols *protocol = context->protocols;
+	int n, i = 0;
 
 	lwsl_notice("%s\n", __func__);
 
@@ -328,10 +334,11 @@ libwebsocket_context_destroy(struct libwebsocket_context *context)
 	 * callbacks
 	 */
 
-	while (protocol->callback) {
-		protocol->callback(context, NULL, LWS_CALLBACK_PROTOCOL_DESTROY,
+
+	while (context->protocols[i]) {
+		context->protocols[i]->callback(context, NULL, LWS_CALLBACK_PROTOCOL_DESTROY,
 				NULL, NULL, 0);
-		protocol++;
+		i++;
 	}
 
 	lws_plat_context_early_destroy(context);
@@ -346,3 +353,4 @@ libwebsocket_context_destroy(struct libwebsocket_context *context)
 
 	lws_free(context);
 }
+#endif // CONTEXT_C

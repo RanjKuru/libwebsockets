@@ -1,3 +1,5 @@
+#ifndef SSL_HTTP2_C
+#define SSL_HTTP2_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -152,3 +154,4 @@ void lws_http2_configure_if_upgraded(struct libwebsocket *wsi)
 
 #endif
 #endif
+#endif // SSL_HTTP2_C

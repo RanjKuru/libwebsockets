@@ -1,3 +1,5 @@
+#ifndef CLIENT_PARSER_C
+#define CLIENT_PARSER_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -246,7 +248,7 @@ int libwebsocket_client_rx_sm(struct libwebsocket *wsi, unsigned char c)
 		else
 			if (wsi->protocol->rx_buffer_size &&
 					wsi->u.ws.rx_user_buffer_head !=
-						  wsi->protocol->rx_buffer_size)
+						  (int)wsi->protocol->rx_buffer_size)
 			break;
 
 		/* spill because we filled our rx buffer */
@@ -366,7 +368,7 @@ spill:
 
 		eff_buf.token[eff_buf.token_len] = '\0';
 
-		if (!wsi->protocol->callback)
+		if (!wsi->protocol)
 			goto already_done;
 
 		if (callback_action == LWS_CALLBACK_CLIENT_RECEIVE_PONG)
@@ -400,5 +402,6 @@ illegal_ctl_length:
 	/* kill the connection */
 	return -1;
 }
+#endif // CLIENT_PARSER_C
 
 

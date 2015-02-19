@@ -1,3 +1,5 @@
+#ifndef SERVER_C
+#define SERVER_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -64,7 +66,6 @@ int lws_context_init_server(struct lws_context_creation_info *info,
 	}
 
 	lws_plat_set_socket_options(context, sockfd);
-
 #ifdef LWS_USE_IPV6
 	if (LWS_IPV6_ENABLED(context)) {
 		v = (struct sockaddr *)&serv_addr6;
@@ -81,7 +82,6 @@ int lws_context_init_server(struct lws_context_creation_info *info,
 		bzero((char *) &serv_addr4, sizeof(serv_addr4));
 		serv_addr4.sin_addr.s_addr = INADDR_ANY;
 		serv_addr4.sin_family = AF_INET;
-
 		if (info->iface) {
 			if (interface_to_sa(context, info->iface,
 				   (struct sockaddr_in *)v, n) < 0) {
@@ -110,7 +110,7 @@ int lws_context_init_server(struct lws_context_creation_info *info,
 
 	context->listen_port = info->port;
 
-	wsi = lws_zalloc(sizeof(struct libwebsocket));
+	wsi = (struct libwebsocket *)lws_zalloc(sizeof(struct libwebsocket));
 	if (wsi == NULL) {
 		lwsl_err("Out of mem\n");
 		compatible_close(sockfd);
@@ -200,8 +200,8 @@ int lws_http_action(struct libwebsocket_context *context,
 	
 	/* it's not websocket.... shall we accept it as http? */
 
-	for (n = 0; n < ARRAY_SIZE(methods); n++)
-		if (lws_hdr_total_length(wsi, methods[n]))
+	for (n = 0; n < (int)ARRAY_SIZE(methods); n++)
+		if (lws_hdr_total_length(wsi, (enum lws_token_indexes)methods[n]))
 			count++;
 	if (!count) {
 		lwsl_warn("Missing URI in HTTP request\n");
@@ -216,10 +216,10 @@ int lws_http_action(struct libwebsocket_context *context,
 	if (libwebsocket_ensure_user_space(wsi))
 		goto bail_nuke_ah;
 
-	for (n = 0; n < ARRAY_SIZE(methods); n++)
-		if (lws_hdr_total_length(wsi, methods[n])) {
-			uri_ptr = lws_hdr_simple_ptr(wsi, methods[n]);
-			uri_len = lws_hdr_total_length(wsi, methods[n]);
+	for (n = 0; n < (int)ARRAY_SIZE(methods); n++)
+		if (lws_hdr_total_length(wsi, (enum lws_token_indexes)methods[n])) {
+			uri_ptr = lws_hdr_simple_ptr(wsi, (enum lws_token_indexes)methods[n]);
+			uri_len = lws_hdr_total_length(wsi, (enum lws_token_indexes)methods[n]);
 			lwsl_info("Method: %s request for '%s'\n",
 				  	method_names[n], uri_ptr);
 			break;
@@ -273,7 +273,7 @@ int lws_http_action(struct libwebsocket_context *context,
 	wsi->u.http.connection_type = connection_type;
 
 	n = 0;
-	if (wsi->protocol->callback)
+	if (wsi->protocol)
 		n = wsi->protocol->callback(context, wsi,
 					LWS_CALLBACK_FILTER_HTTP_CONNECTION,
 					     wsi->user_space, uri_ptr, uri_len);
@@ -286,7 +286,7 @@ int lws_http_action(struct libwebsocket_context *context,
 		libwebsocket_set_timeout(wsi, PENDING_TIMEOUT_HTTP_CONTENT,
 							      AWAITING_TIMEOUT);
 
-		if (wsi->protocol->callback)
+		if (wsi->protocol)
 			n = wsi->protocol->callback(context, wsi,
 			    LWS_CALLBACK_HTTP,
 			    wsi->user_space, uri_ptr, uri_len);
@@ -417,7 +417,7 @@ upgrade_h2c:
 		      "Upgrade: h2c\x0d\x0a\x0d\x0a");
 		n = lws_issue_raw(wsi, (unsigned char *)protocol_list,
 					strlen(protocol_list));
-		if (n != strlen(protocol_list)) {
+		if (n != (int)strlen(protocol_list)) {
 			lwsl_debug("http2 switch: ERROR writing to socket\n");
 			return 1;
 		}
@@ -453,7 +453,7 @@ upgrade_ws:
 
 		while (*p && !hit) {
 			n = 0;
-			while (n < sizeof(protocol_name) - 1 && *p && *p !=',')
+			while (n < (int)sizeof(protocol_name) - 1 && *p && *p !=',')
 				protocol_name[n++] = *p++;
 			protocol_name[n] = '\0';
 			if (*p)
@@ -462,15 +462,15 @@ upgrade_ws:
 			lwsl_info("checking %s\n", protocol_name);
 
 			n = 0;
-			while (wsi->protocol && context->protocols[n].callback) {
+			while (wsi->protocol && context->protocols && context->protocols[n]) {
 				if (!wsi->protocol->name) {
 					n++;
 					continue;
 				}
-				if (!strcmp(context->protocols[n].name,
+				if (!strcmp(context->protocols[n]->name,
 					    protocol_name)) {
 					lwsl_info("prot match %d\n", n);
-					wsi->protocol = &context->protocols[n];
+					wsi->protocol = context->protocols[n];
 					hit = 1;
 					break;
 				}
@@ -490,7 +490,7 @@ upgrade_ws:
 				 * allow it and match to protocol 0
 				 */
 				lwsl_info("defaulting to prot 0 handler\n");
-				wsi->protocol = &context->protocols[0];
+				wsi->protocol = context->protocols[0];
 			} else {
 				lwsl_err("No protocol from list \"%s\" supported\n",
 					 protocol_list);
@@ -551,7 +551,7 @@ upgrade_ws:
 		if (!n)
 			n = LWS_MAX_SOCKET_IO_BUF;
 		n += LWS_SEND_BUFFER_PRE_PADDING + LWS_SEND_BUFFER_POST_PADDING;
-		wsi->u.ws.rx_user_buffer = lws_malloc(n);
+		wsi->u.ws.rx_user_buffer = (char *)lws_malloc(n);
 		if (!wsi->u.ws.rx_user_buffer) {
 			lwsl_err("Out of Mem allocating rx buffer %d\n", n);
 			return 1;
@@ -580,7 +580,7 @@ libwebsocket_create_new_server_wsi(struct libwebsocket_context *context)
 {
 	struct libwebsocket *new_wsi;
 
-	new_wsi = lws_zalloc(sizeof(struct libwebsocket));
+	new_wsi = (struct libwebsocket *)lws_zalloc(sizeof(struct libwebsocket));
 	if (new_wsi == NULL) {
 		lwsl_err("Out of memory for new connection\n");
 		return NULL;
@@ -606,7 +606,7 @@ libwebsocket_create_new_server_wsi(struct libwebsocket_context *context)
 	 * to the start of the supported list, so it can look
 	 * for matching ones during the handshake
 	 */
-	new_wsi->protocol = context->protocols;
+	new_wsi->protocol = context->protocols[0];
 	new_wsi->user_space = NULL;
 	new_wsi->ietf_spec_revision = 0;
 
@@ -614,7 +614,7 @@ libwebsocket_create_new_server_wsi(struct libwebsocket_context *context)
 	 * outermost create notification for wsi
 	 * no user_space because no protocol selection
 	 */
-	context->protocols[0].callback(context, new_wsi,
+	context->protocols[0]->callback(context, new_wsi,
 			LWS_CALLBACK_WSI_CREATE, NULL, NULL, 0);
 
 	return new_wsi;
@@ -733,7 +733,6 @@ try_pollout:
 
 		if (wsi->state != WSI_STATE_HTTP_ISSUING_FILE) {
 			n = user_callback_handle_rxflow(
-					wsi->protocol->callback,
 					wsi->protocol->owning_server,
 					wsi, LWS_CALLBACK_HTTP_WRITEABLE,
 					wsi->user_space,
@@ -783,7 +782,7 @@ try_pollout:
 		 * yet so we issue this to protocols[0]
 		 */
 
-		if ((context->protocols[0].callback)(context, wsi,
+		if ((context->protocols[0]->callback)(context, wsi,
 				LWS_CALLBACK_FILTER_NETWORK_CONNECTION,
 					   NULL, (void *)(long)accept_fd, 0)) {
 			lwsl_debug("Callback denied network connection\n");
@@ -810,7 +809,7 @@ try_pollout:
 		 * selected yet so we issue this to protocols[0]
 		 */
 
-		(context->protocols[0].callback)(context, new_wsi,
+		(context->protocols[0]->callback)(context, new_wsi,
 			LWS_CALLBACK_SERVER_NEW_CLIENT_INSTANTIATED, NULL, NULL, 0);
 
 		lws_libev_accept(context, new_wsi, accept_fd);
@@ -1158,3 +1157,4 @@ lws_server_get_canonical_hostname(struct libwebsocket_context *context,
 
 	lwsl_notice(" canonical_hostname = %s\n", context->canonical_hostname);
 }
+#endif // SERVER_C

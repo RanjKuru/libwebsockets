@@ -1,3 +1,5 @@
+#ifndef MINIHUF_C
+#define MINIHUF_C
 /*
  * minilex.c
  *
@@ -516,3 +518,4 @@ again:
 
 	return 0;
 }
+#endif // MINIHUF_C

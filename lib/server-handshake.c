@@ -1,3 +1,5 @@
+#ifndef SERVER_HANDSHAKE_C
+#define SERVER_HANDSHAKE_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -60,7 +62,7 @@ lws_extension_server_handshake(struct libwebsocket_context *context,
 
 		if (*c && (*c != ',' && *c != ' ' && *c != '\t')) {
 			ext_name[n] = *c++;
-			if (n < sizeof(ext_name) - 1)
+			if (n < (int)sizeof(ext_name) - 1)
 				n++;
 			continue;
 		}
@@ -75,9 +77,9 @@ lws_extension_server_handshake(struct libwebsocket_context *context,
 
 		/* check a client's extension against our support */
 
-		ext = wsi->protocol->owning_server->extensions;
+		ext = wsi->protocol->owning_server->extensions[0];
 
-		while (ext && ext->callback) {
+		while (ext) {
 
 			if (strcmp(ext_name, ext->name)) {
 				ext++;
@@ -92,7 +94,7 @@ lws_extension_server_handshake(struct libwebsocket_context *context,
 			 */
 
 			n = wsi->protocol->owning_server->
-				protocols[0].callback(
+				protocols[0]->callback(
 					wsi->protocol->owning_server,
 					wsi,
 				  LWS_CALLBACK_CONFIRM_EXTENSION_OKAY,
@@ -258,7 +260,7 @@ handshake_0405(struct libwebsocket_context *context, struct libwebsocket *wsi)
 
 	/* notify user code that we're ready to roll */
 
-	if (wsi->protocol->callback)
+	if (wsi->protocol)
 		wsi->protocol->callback(wsi->protocol->owning_server,
 				wsi, LWS_CALLBACK_ESTABLISHED,
 					  wsi->user_space, NULL, 0);
@@ -271,4 +273,4 @@ bail:
 	lws_free_header_table(wsi);
 	return -1;
 }
-
+#endif // SERVER_HANDSHAKE_C

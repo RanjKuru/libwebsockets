@@ -1,3 +1,5 @@
+#ifndef LEXTABLE_H
+#define LEXTABLE_H
 /* pos 0000:   0 */    0x67 /* 'g' */, 0x3D, 0x00  /* (to 0x003D state   1) */,
                        0x70 /* 'p' */, 0x3F, 0x00  /* (to 0x0042 state   5) */,
                        0x6F /* 'o' */, 0x4E, 0x00  /* (to 0x0054 state  10) */,
@@ -758,3 +760,4 @@
 /* pos 041f: 646 */    0xE5 /* 'e' -> */,
 /* pos 0420: 647 */    0x00, 0x4C                  /* - terminal marker 76 - */,
 /* total size 1058 bytes */
+#endif // LEXTABLE_H

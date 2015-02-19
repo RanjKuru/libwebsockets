@@ -1,3 +1,5 @@
+#ifndef SSL_C
+#define SSL_C
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -21,6 +23,7 @@
 
 #include "private-libwebsockets.h"
  #include <openssl/err.h>
+#include <openssl/ssl.h>
 
 int openssl_websocket_private_data_index;
 
@@ -57,16 +60,16 @@ OpenSSL_verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)
 	int n;
 	struct libwebsocket_context *context;
 
-	ssl = X509_STORE_CTX_get_ex_data(x509_ctx,
+	ssl = (SSL *)X509_STORE_CTX_get_ex_data(x509_ctx,
 		SSL_get_ex_data_X509_STORE_CTX_idx());
 
 	/*
 	 * !!! nasty openssl requires the index to come as a library-scope
 	 * static
 	 */
-	context = SSL_get_ex_data(ssl, openssl_websocket_private_data_index);
+	context = (struct libwebsocket_context *)SSL_get_ex_data(ssl, openssl_websocket_private_data_index);
 
-	n = context->protocols[0].callback(NULL, NULL,
+	n = context->protocols[0]->callback(NULL, NULL,
 		LWS_CALLBACK_OPENSSL_PERFORM_CLIENT_CERT_VERIFICATION,
 						   x509_ctx, ssl, preverify_ok);
 
@@ -102,15 +105,11 @@ lws_context_init_server_ssl(struct lws_context_creation_info *info,
 	}
 
 	/* basic openssl init */
-
 	SSL_library_init();
-
 	OpenSSL_add_all_algorithms();
 	SSL_load_error_strings();
-
 	openssl_websocket_private_data_index =
-		SSL_get_ex_new_index(0, "libwebsockets", NULL, NULL, NULL);
-
+		SSL_get_ex_new_index(0, (void*)"libwebsockets", (CRYPTO_EX_new *)NULL, (CRYPTO_EX_dup *)NULL, (CRYPTO_EX_free *)NULL);
 	/*
 	 * Firefox insists on SSLv23 not SSLv3
 	 * Konq disables SSLv2 by default now, SSLv23 works
@@ -119,7 +118,6 @@ lws_context_init_server_ssl(struct lws_context_creation_info *info,
 	 * versions", compared to e.g. TLSv1_2_server_method() which only allows
 	 * tlsv1.2. Unwanted versions must be disabled using SSL_CTX_set_options()
 	 */
-
 	method = (SSL_METHOD *)SSLv23_server_method();
 	if (!method) {
 		error = ERR_get_error();
@@ -146,33 +144,27 @@ lws_context_init_server_ssl(struct lws_context_creation_info *info,
 	if (info->ssl_cipher_list)
 		SSL_CTX_set_cipher_list(context->ssl_ctx,
 						info->ssl_cipher_list);
-
 	/* as a server, are we requiring clients to identify themselves? */
-
 	if (info->options &
 			LWS_SERVER_OPTION_REQUIRE_VALID_OPENSSL_CLIENT_CERT) {
-
 		/* absolutely require the client cert */
 
 		SSL_CTX_set_verify(context->ssl_ctx,
 		       SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
 						       OpenSSL_verify_callback);
-
 		/*
 		 * give user code a chance to load certs into the server
 		 * allowing it to verify incoming client certs
 		 */
-
-		context->protocols[0].callback(context, NULL,
+		context->protocols[0]->callback(context, NULL,
 			LWS_CALLBACK_OPENSSL_LOAD_EXTRA_SERVER_VERIFY_CERTS,
 						     context->ssl_ctx, NULL, 0);
-	}
 
+	}
 	if (info->options & LWS_SERVER_OPTION_ALLOW_NON_SSL_ON_SSL_PORT) {
 		/* Normally SSL listener rejects non-ssl, optionally allow */
 		context->allow_non_ssl_on_ssl_port = 1;
 	}
-
 	if (context->use_ssl) {
 
 		/* openssl init for server sockets */
@@ -206,7 +198,7 @@ lws_context_init_server_ssl(struct lws_context_creation_info *info,
 			}
 		}
 		else {
-			if (context->protocols[0].callback(context, NULL,
+			if (context->protocols[0]->callback(context, NULL,
 				LWS_CALLBACK_OPENSSL_CONTEXT_REQUIRES_PRIVATE_KEY,
 						context->ssl_ctx, NULL, 0)) {
 				lwsl_err("ssl private key not set\n");
@@ -227,7 +219,6 @@ lws_context_init_server_ssl(struct lws_context_creation_info *info,
 		
 		lws_context_init_http2_ssl(context);
 	}
-	
 	return 0;
 }
 #endif
@@ -384,7 +375,7 @@ int lws_context_init_client_ssl(struct lws_context_creation_info *info,
 		}
 	} 
 
-	context->protocols[0].callback(context, NULL,
+	context->protocols[0]->callback(context, NULL,
 		LWS_CALLBACK_OPENSSL_LOAD_EXTRA_CLIENT_VERIFY_CERTS,
 		context->ssl_client_ctx, NULL, 0);
 	
@@ -674,3 +665,4 @@ lws_ssl_context_destroy(struct libwebsocket_context *context)
 	EVP_cleanup();
 	CRYPTO_cleanup_all_ex_data();
 }
+#endif // SSL_C

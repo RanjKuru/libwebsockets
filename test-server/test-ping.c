@@ -77,15 +77,6 @@ struct ping {
 	unsigned int seen;
 };
 
-struct per_session_data__ping {
-	uint64_t ping_index;
-
-	struct ping ringbuffer[PING_RINGBUFFER_SIZE];
-	int ringbuffer_head;
-	int ringbuffer_tail;
-
-	unsigned long rx_count;
-};
 
 /*
  * uses the ping pong protocol features to provide an equivalent for the
@@ -100,9 +91,18 @@ enum demo_protocols {
 	DEMO_PROTOCOL_COUNT
 };
 
+struct per_session_data__ping {
+	uint64_t ping_index;
+
+	struct ping ringbuffer[PING_RINGBUFFER_SIZE];
+	int ringbuffer_head;
+	int ringbuffer_tail;
+
+	unsigned long rx_count;
+};
 
 static int
-callback_lws_mirror(struct libwebsocket_context * this,
+callback_lws_mirror(struct libwebsocket_context * context,
 			struct libwebsocket *wsi,
 			enum libwebsocket_callback_reasons reason,
 					       void *user, void *in, size_t len)
@@ -114,7 +114,7 @@ callback_lws_mirror(struct libwebsocket_context * this,
 	unsigned long iv;
 	int n;
 	int match = 0;
-	struct per_session_data__ping *psd = user;
+	struct per_session_data__ping *psd = (struct per_session_data__ping *)user;
 
 	switch (reason) {
 	case LWS_CALLBACK_CLOSED:
@@ -146,7 +146,7 @@ callback_lws_mirror(struct libwebsocket_context * this,
 		 * LWS_CALLBACK_CLIENT_WRITEABLE will come next service
 		 */
 
-		libwebsocket_callback_on_writable(this, wsi);
+		libwebsocket_callback_on_writable(context, wsi);
 		break;
 
 	case LWS_CALLBACK_CLIENT_RECEIVE:
@@ -157,7 +157,7 @@ callback_lws_mirror(struct libwebsocket_context * this,
 		psd->rx_count++;
 
 		shift = 56;
-		p = in;
+		p = (unsigned char*)in;
 		l = 0;
 
 		while (shift >= 0) {
@@ -260,11 +260,11 @@ callback_lws_mirror(struct libwebsocket_context * this,
 		if (use_mirror)
 			n = libwebsocket_write(wsi,
 				&pingbuf[LWS_SEND_BUFFER_PRE_PADDING],
-					size, write_options | LWS_WRITE_BINARY);
+					size, (enum libwebsocket_write_protocol)(write_options | LWS_WRITE_BINARY));
 		else
 			n = libwebsocket_write(wsi,
 				&pingbuf[LWS_SEND_BUFFER_PRE_PADDING],
-					size, write_options | LWS_WRITE_PING);
+					size, (enum libwebsocket_write_protocol)(write_options | LWS_WRITE_PING));
 
 		if (n < 0)
 			return -1;
@@ -284,21 +284,33 @@ callback_lws_mirror(struct libwebsocket_context * this,
 
 	return 0;
 }
-
-
-/* list of supported protocols and callbacks */
-
-static struct libwebsocket_protocols protocols[] = {
-
+#ifdef __cplusplus
+class Mirror: public libwebsocket_protocol
+{
+public:
+	Mirror(struct libwebsocket_context *context)
 	{
-		"lws-mirror-protocol",
-		callback_lws_mirror,
-		sizeof (struct per_session_data__ping),
-	},
-	{ 
-		NULL, NULL, 0/* end of list */		
-	}
+		this->name = "lws-mirror-protocol";
+		this->id = 0;
+		this->per_session_data_size = sizeof(struct per_session_data__ping);
+		this->rx_buffer_size = 0;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~Mirror()
+	{
+
+	};
+	virtual int
+	callback(struct libwebsocket_context * context,
+				struct libwebsocket *wsi,
+				enum libwebsocket_callback_reasons reason,
+							   void *user, void *in, size_t len)
+	{
+		return callback_lws_mirror(context, wsi, reason, user, in, len);
+	};
 };
+#endif
 
 static struct option options[] = {
 	{ "help",	no_argument,		NULL, 'h' },
@@ -332,7 +344,7 @@ int main(int argc, char **argv)
 	int n = 0;
 	int port = 7681;
 	int use_ssl = 0;
-	struct libwebsocket_context *context;
+	struct libwebsocket_context *context = NULL;
 	char protocol_name[256];
 	char ip[30];
 #ifndef WIN32
@@ -352,7 +364,18 @@ int main(int argc, char **argv)
 
 	address = argv[1];
 	optind++;
-
+	info.port = CONTEXT_PORT_NO_LISTEN;
+	info.protocols = lws_init_protocols(1);
+#ifdef __cplusplus
+	info.protocols[0] = new Mirror(context);
+#else
+	info.protocols[0] = lws_build_protocol("lws-mirror-protocol", 0, callback_lws_mirror, sizeof(struct per_session_data__ping), 0, NULL, context);
+#endif
+#ifndef LWS_NO_EXTENSIONS
+	info.extensions = libwebsocket_get_internal_extensions();
+#endif
+	info.gid = -1;
+	info.uid = -1;
 	while (n >= 0) {
 		n = getopt_long(argc, argv, "v:kr:hmfts:n:i:p:d:", options, NULL);
 		if (n < 0)
@@ -373,7 +396,7 @@ int main(int argc, char **argv)
 		case 'n':
 			strncpy(protocol_name, optarg, sizeof protocol_name);
 			protocol_name[(sizeof protocol_name) - 1] = '\0';
-			protocols[PROTOCOL_LWS_MIRROR].name = protocol_name;
+			info.protocols[PROTOCOL_LWS_MIRROR]->name = protocol_name;
 			break;
 		case 'i':
 			interval_us = 1000000.0 * atof(optarg);
@@ -425,14 +448,6 @@ int main(int argc, char **argv)
 				screen_width = w.ws_col;
 #endif
 
-	info.port = CONTEXT_PORT_NO_LISTEN;
-	info.protocols = protocols;
-#ifndef LWS_NO_EXTENSIONS
-	info.extensions = libwebsocket_get_internal_extensions();
-#endif
-	info.gid = -1;
-	info.uid = -1;
-
 	context = libwebsocket_create_context(&info);
 	if (context == NULL) {
 		fprintf(stderr, "Creating libwebsocket context failed\n");
@@ -444,7 +459,7 @@ int main(int argc, char **argv)
 	for (n = 0; n < clients; n++) {
 		ping_wsi[n] = libwebsocket_client_connect(context, address,
 						   port, use_ssl, "/", address,
-				 "origin", protocols[PROTOCOL_LWS_MIRROR].name,
+				 "origin", info.protocols[PROTOCOL_LWS_MIRROR]->name,
 								  ietf_version);
 		if (ping_wsi[n] == NULL) {
 			fprintf(stderr, "client connection %d failed to "

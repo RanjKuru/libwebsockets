@@ -1,3 +1,5 @@
+#ifndef PRIVATE_LIBWEBSOCKETS_H
+#define PRIVATE_LIBWEBSOCKETS_H
 /*
  * libwebsockets - small server side websockets and web server implementation
  *
@@ -403,7 +405,7 @@ enum {
 	LWS_RXFLOW_PENDING_CHANGE = (1 << 1),
 };
 
-struct libwebsocket_protocols;
+struct libwebsocket_protocol;
 struct libwebsocket;
 
 #ifdef LWS_USE_LIBEV
@@ -498,10 +500,10 @@ struct libwebsocket_context {
 #else
 #define lws_ssl_anybody_has_buffered_read(ctx) (0)
 #endif
-	struct libwebsocket_protocols *protocols;
+	struct libwebsocket_protocol **protocols;
 	int count_protocols;
 #ifndef LWS_NO_EXTENSIONS
-	struct libwebsocket_extension *extensions;
+	struct libwebsocket_extension **extensions;
 #endif
     struct lws_token_limits *token_limits;
 	void *user_space;
@@ -805,7 +807,7 @@ struct libwebsocket {
     struct lws_io_watcher w_read;
     struct lws_io_watcher w_write;
 #endif /* LWS_USE_LIBEV */
-	const struct libwebsocket_protocols *protocol;
+	struct libwebsocket_protocol *protocol;
 #ifndef LWS_NO_EXTENSIONS
 	struct libwebsocket_extension *
 				   active_extensions[LWS_MAX_EXTENSIONS_ACTIVE];
@@ -1002,8 +1004,7 @@ LWS_EXTERN void
 lws_union_transition(struct libwebsocket *wsi, enum connection_mode mode);
 
 LWS_EXTERN int
-user_callback_handle_rxflow(callback_function,
-		struct libwebsocket_context *context,
+user_callback_handle_rxflow(struct libwebsocket_context *context,
 			struct libwebsocket *wsi,
 			 enum libwebsocket_callback_reasons reason, void *user,
 							  void *in, size_t len);
@@ -1250,3 +1251,4 @@ LWS_EXTERN unsigned long long
 time_in_microseconds(void);
 LWS_EXTERN const char *
 lws_plat_inet_ntop(int af, const void *src, char *dst, int cnt);
+#endif // PRIVATE_LIBWEBSOCKETS_H

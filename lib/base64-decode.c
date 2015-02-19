@@ -1,3 +1,5 @@
+#ifndef BASE64_DECODE_C
+#define BASE64_DECODE_C
 /*
  * This code originally came from here
  *
@@ -151,8 +153,8 @@ int
 lws_b64_selftest(void)
 {
 	char buf[64];
-	int n;
-	int test;
+	unsigned int n;
+	unsigned int test;
 	static const char * const plaintext[] = {
 		"sanity check base 64"
 	};
@@ -183,3 +185,4 @@ lws_b64_selftest(void)
 
 	return 0;
 }
+#endif // BASE64_DECODE_C

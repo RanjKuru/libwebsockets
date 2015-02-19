@@ -1,8 +1,9 @@
-
+#ifndef EXTENSION_DEFLATE_FRAME_H
+#define EXTENSION_DEFLATE_FRAME_H
 #include <zlib.h>
-
-#define DEFLATE_FRAME_COMPRESSION_LEVEL_SERVER 1
-#define DEFLATE_FRAME_COMPRESSION_LEVEL_CLIENT Z_DEFAULT_COMPRESSION
+#include "private-libwebsockets.h"
+#define LWS_ZLIB_WINDOW_BITS 15
+#define LWS_ZLIB_MEMLEVEL 8
 
 struct lws_ext_deflate_frame_conn {
 	z_stream zs_in;
@@ -23,3 +24,28 @@ extern int lws_extension_callback_deflate_frame(
 		struct libwebsocket *wsi,
 		enum libwebsocket_extension_callback_reasons reason,
 		void *user, void *in, size_t len);
+
+#ifdef __cplusplus
+class Extension_Deflate_Frame: public libwebsocket_extension
+{
+public:
+	Extension_Deflate_Frame(const char* name)
+	{
+		this->name = name;
+		this->per_session_data_size = sizeof(struct lws_ext_deflate_frame_conn);
+		this->per_context_private_data = NULL;
+	};
+	virtual ~Extension_Deflate_Frame()
+	{
+
+	};
+	virtual int callback(
+			struct libwebsocket_context *context,
+			struct libwebsocket_extension *ext,
+			struct libwebsocket *wsi,
+			enum libwebsocket_extension_callback_reasons reason,
+			void *user, void *in, size_t len);
+};
+#endif
+
+#endif // EXTENSION_DEFLATE_FRAME_H

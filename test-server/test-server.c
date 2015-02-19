@@ -80,7 +80,7 @@ enum demo_protocols {
 };
 
 
-#define LOCAL_RESOURCE_PATH INSTALL_DATADIR"/libwebsockets-test-server"
+#define LOCAL_RESOURCE_PATH "bin/libwebsockets-test-server"
 char *resource_path = LOCAL_RESOURCE_PATH;
 
 /*
@@ -90,10 +90,6 @@ char *resource_path = LOCAL_RESOURCE_PATH;
 struct serveable {
 	const char *urlpath;
 	const char *mimetype;
-}; 
-
-struct per_session_data__http {
-	int fd;
 };
 
 /*
@@ -110,18 +106,18 @@ dump_handshake_info(struct libwebsocket *wsi)
 	const unsigned char *c;
 
 	do {
-		c = lws_token_to_string(n);
+		c = lws_token_to_string((enum lws_token_indexes)n);
 		if (!c) {
 			n++;
 			continue;
 		}
 
-		if (!lws_hdr_total_length(wsi, n)) {
+		if (!lws_hdr_total_length((struct libwebsocket *)wsi, (enum lws_token_indexes)n)) {
 			n++;
 			continue;
 		}
 
-		lws_hdr_copy(wsi, buf, sizeof buf, n);
+		lws_hdr_copy(wsi, buf, sizeof buf, (enum lws_token_indexes)n);
 
 		fprintf(stderr, "    %s = %s\n", (char *)c, buf);
 		n++;
@@ -148,7 +144,9 @@ const char * get_mimetype(const char *file)
 }
 
 /* this protocol server (always the first one) just knows how to do HTTP */
-
+struct per_session_data__http {
+	int fd;
+};
 static int callback_http(struct libwebsocket_context *context,
 		struct libwebsocket *wsi,
 		enum libwebsocket_callback_reasons reason, void *user,
@@ -272,10 +270,10 @@ static int callback_http(struct libwebsocket_context *context,
 
 		/* if not, send a file the easy way */
 		strcpy(buf, resource_path);
-		if (strcmp(in, "/")) {
+		if (strcmp((char*)in, "/")) {
 			if (*((const char *)in) != '/')
 				strcat(buf, "/");
-			strncat(buf, in, sizeof(buf) - strlen(resource_path));
+			strncat(buf, (char*)in, sizeof(buf) - strlen(resource_path));
 		} else /* default file to serve */
 			strcat(buf, "/test.html");
 		buf[sizeof(buf) - 1] = '\0';
@@ -326,7 +324,7 @@ static int callback_http(struct libwebsocket_context *context,
 		break;
 
 	case LWS_CALLBACK_HTTP_BODY:
-		strncpy(buf, in, 20);
+		strncpy(buf, (char*)in, 20);
 		buf[20] = '\0';
 		if (len < 20)
 			buf[len] = '\0';
@@ -509,8 +507,32 @@ try_to_reuse:
 
 	return 0;
 }
+#ifdef __cplusplus
+class HTTP: public libwebsocket_protocol
+{
+public:
+	HTTP(struct libwebsocket_context *context)
+	{
+		this->name = "http-only";
+		this->id = 0;
+		this->per_session_data_size = sizeof(struct per_session_data__http);
+		this->rx_buffer_size = 0;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~HTTP()
+	{
 
-
+	};
+	virtual int callback(struct libwebsocket_context *context,
+			struct libwebsocket *wsi,
+			enum libwebsocket_callback_reasons reason, void *user,
+								   void *in, size_t len)
+	{
+		return callback_http(context, wsi, reason, user, in, len);
+	};
+};
+#endif
 /* dumb_increment protocol */
 
 /*
@@ -582,22 +604,49 @@ callback_dumb_increment(struct libwebsocket_context *context,
 
 	return 0;
 }
+#ifdef __cplusplus
+class DumbIncrement: public libwebsocket_protocol
+{
+public:
+	DumbIncrement(struct libwebsocket_context *context)
+	{
+		this->name = "dumb-increment-protocol";
+		this->id = 0;
+		this->per_session_data_size = sizeof(struct per_session_data__dumb_increment);
+		this->rx_buffer_size = 10;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~DumbIncrement()
+	{
 
+	};
 
+	virtual int
+	callback(struct libwebsocket_context *context,
+				struct libwebsocket *wsi,
+				enum libwebsocket_callback_reasons reason,
+							   void *user, void *in, size_t len)
+	{
+		return callback_dumb_increment(context, wsi, reason, user, in, len);
+	};
+};
+#endif
 /* lws-mirror_protocol */
 
 #define MAX_MESSAGE_QUEUE 32
 
-struct per_session_data__lws_mirror {
-	struct libwebsocket *wsi;
-	int ringbuffer_tail;
-};
+
 
 struct a_message {
 	void *payload;
 	size_t len;
 };
 
+struct per_session_data__lws_mirror {
+	struct libwebsocket *wsi;
+	int ringbuffer_tail;
+};
 static struct a_message ringbuffer[MAX_MESSAGE_QUEUE];
 static int ringbuffer_head;
 
@@ -724,33 +773,36 @@ done:
 
 	return 0;
 }
-
-
-/* list of supported protocols and callbacks */
-
-static struct libwebsocket_protocols protocols[] = {
-	/* first protocol must always be HTTP handler */
-
+#ifdef __cplusplus
+class Mirror: public libwebsocket_protocol
+{
+public:
+	Mirror(struct libwebsocket_context *context)
 	{
-		"http-only",		/* name */
-		callback_http,		/* callback */
-		sizeof (struct per_session_data__http),	/* per_session_data_size */
-		0,			/* max frame size / rx buffer */
-	},
+		this->name = "lws-mirror-protocol";
+		this->id = 0;
+		this->per_session_data_size = sizeof(struct per_session_data__lws_mirror);
+		this->rx_buffer_size = 128;
+		this->user = NULL;
+		this->owning_server = context;
+	};
+	virtual ~Mirror()
 	{
-		"dumb-increment-protocol",
-		callback_dumb_increment,
-		sizeof(struct per_session_data__dumb_increment),
-		10,
-	},
+
+	};
+
+
+	virtual int
+	callback(struct libwebsocket_context *context,
+				struct libwebsocket *wsi,
+				enum libwebsocket_callback_reasons reason,
+							   void *user, void *in, size_t len)
 	{
-		"lws-mirror-protocol",
-		callback_lws_mirror,
-		sizeof(struct per_session_data__lws_mirror),
-		128,
-	},
-	{ NULL, NULL, 0, 0 } /* terminator */
+		return callback_lws_mirror(context, wsi, reason, user, in, len);
+	};
 };
+
+#endif
 
 void sighandler(int sig)
 {
@@ -879,16 +931,24 @@ int main(int argc, char **argv)
 	printf("Using resource path \"%s\"\n", resource_path);
 #ifdef EXTERNAL_POLL
 	max_poll_elements = getdtablesize();
-	pollfds = malloc(max_poll_elements * sizeof (struct pollfd));
-	fd_lookup = malloc(max_poll_elements * sizeof (int));
+	pollfds = (struct pollfd *)malloc(max_poll_elements * sizeof (struct pollfd));
+	fd_lookup = (int *)malloc(max_poll_elements * sizeof (int));
 	if (pollfds == NULL || fd_lookup == NULL) {
 		lwsl_err("Out of memory pollfds=%d\n", max_poll_elements);
 		return -1;
 	}
 #endif
-
 	info.iface = iface;
-	info.protocols = protocols;
+	info.protocols = lws_init_protocols(3);
+#ifdef __cplusplus
+	info.protocols[0] = new HTTP(context);
+	info.protocols[1] = new DumbIncrement(context);
+	info.protocols[2] = new Mirror(context);
+#else
+	info.protocols[0] = lws_build_protocol("http-only", 0, callback_http, sizeof(struct per_session_data__http), 0, NULL, context);
+	info.protocols[1] = lws_build_protocol("dumb-increment-protocol", 0, callback_dumb_increment, sizeof(struct per_session_data__dumb_increment), 10, NULL, context);
+	info.protocols[2] = lws_build_protocol("lws-mirror-protocol", 0, callback_lws_mirror, sizeof(struct per_session_data__lws_mirror), 128, NULL, context);
+#endif
 #ifndef LWS_NO_EXTENSIONS
 	info.extensions = libwebsocket_get_internal_extensions();
 #endif
@@ -936,7 +996,7 @@ int main(int argc, char **argv)
 
 		ms = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
 		if ((ms - oldms) > 50) {
-			libwebsocket_callback_on_writable_all_protocol(&protocols[PROTOCOL_DUMB_INCREMENT]);
+			libwebsocket_callback_on_writable_all_protocol(info.protocols[PROTOCOL_DUMB_INCREMENT]);
 			oldms = ms;
 		}
 
